@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.9 - 2026-09-08
+
+- Use native EasyEDA ground and power symbols, and native net ports in desktop mode, with consistent rotations when creating and cloning schematic components.
+- Preserve global net names from flags and ports when reading schematics, including names absent from wire attributes.
+- Refine the schematic modification guide and refresh the English, Russian, and Chinese documentation with new examples and demos.
+
 ## 1.1.8 - 2026-09-01
 
 - Improved automatic PCB component placement and added `refineGroup` support for controlled post-placement refinement.
