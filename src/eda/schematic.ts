@@ -157,7 +157,15 @@ export async function getSchematic(primitiveIds?: string[], options?: { disableE
             .filter((netName): netName is string => typeof netName === 'string' && netName.trim().length > 0)
         )
         .catch(() => []);
-    const currentPageSignalNames = new Set(allWiresName);
+    const allShortSymbolNames = await eda.sch_PrimitiveComponent.getAll()
+        .then(components => components
+            .filter(component => component.getState_ComponentType() === ESCH_PrimitiveComponentType.NET_FLAG
+                || component.getState_ComponentType() === ESCH_PrimitiveComponentType.NET_PORT)
+            .map(component => component.getState_Net() || component.getState_OtherProperty()?.['Global Net Name'])
+            .filter((netName): netName is string => typeof netName === 'string' && netName.trim().length > 0)
+        )
+        .catch(() => []);
+    const currentPageSignalNames = new Set([...allWiresName, ...allShortSymbolNames]);
 
     const pinToSignal = parseAllegroNetlist(netlistText, currentPageSignalNames);
     eda.sys_Log.add('netlist ' + JSON.stringify(Object.fromEntries(pinToSignal.entries())));
