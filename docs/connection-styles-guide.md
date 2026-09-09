@@ -120,6 +120,10 @@ default (rail-looking names → flag, everything else → bidirectional port).
 
 The result carries `connectionStyleResult` with the same `applied / skipped / errors` shape.
 
+**Expect duplicates on parts placed the old way.** The default placement names the stub wire *and* adds a
+symbol, so a freshly placed pin usually reads as `label` + `flag`/`port`. That is normal; one restyle to the
+style you want keeps the matching symbol and removes the rest.
+
 ## 5. Scope: the one thing the tool cannot check for you
 
 Connectivity is verified on the **current page** only. Changing a label to a port/flag (`local→global`) may
@@ -145,3 +149,10 @@ confirm nothing on another sheet expected that port.
   been eyeballed on horizontal runs so far. Check the first vertical one visually.
 - Label text position is chosen by EasyEDA; it may sit near a designator. Cosmetic.
 - The read uses the Allegro netlist export, so the page must have no duplicate designators.
+
+## 8. Driving the local server from a shell
+
+`node mcp/scripts/mcp-call.mjs [--instance <id>] <tool> '<json>'` calls any tool on the local MCP build
+(`mcp/dist/index.js`) over stdio and joins the running bridge as a proxy, so nothing needs restarting.
+`node mcp/scripts/easyeda-request.mjs <event> '<json>' --instance <id>` sends a raw event straight to the
+extension, bypassing the server (useful for `get-schematic` / `debug-dump-net-symbols`).

@@ -131,6 +131,24 @@ Round two (build 1.2.4, page reverted by hand first) — all applied, every net 
 Not yet demonstrated on the live page: `NAME_MISMATCH` (needs a wire carrying two names, drawn by hand),
 `WOULD_ORPHAN`, rollback.
 
+### Phase 3 live run (build 1.2.5, through the local MCP server via `mcp/scripts/mcp-call.mjs`)
+
+`extract_circuit_on_current_page` added `R3` (pin 1 `GND` with `connection_style: label`, pin 2 `SIG_X` with
+`port input`) and `R4` (no `connection_style`) in one call. Read-back:
+
+```
+R3.1 GND    [label:GND]                 ← exactly the requested symbol
+R3.2 SIG_X  [port:SIG_X(input)]         ← exactly the requested symbol (rotation 270, vertical stub)
+R4.1 GND    [label:GND, flag:GND]       ← v1.1.9 default, unchanged
+R4.2 SIG_Y  [label:SIG_Y, flag:SIG_Y]   ← v1.1.9 default, unchanged
+```
+
+Two facts about the **default** path (upstream `place-net.ts`, not touched by this work): it creates the
+stub wire *with* the net name, so every default-placed pin reads as label + symbol; and in online mode the
+signal "port" it places is a library symbol that EasyEDA classifies as `netflag`. Both are visible now and both
+are what `restyle_connections` cleans up (`R4.1 → flag` keeps the flag and clears the label; `R4.2 → port` …).
+`connectionStyleResult` for `R3.1` correctly reported `scope_change: "global→local"`.
+
 ### Scope
 
 Owner decision (2026-09-09): scope changes (label ⇄ port/flag) are **reported, not blocked** —
