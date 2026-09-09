@@ -143,10 +143,14 @@ R4.1 GND    [label:GND, flag:GND]       ← v1.1.9 default, unchanged
 R4.2 SIG_Y  [label:SIG_Y, flag:SIG_Y]   ← v1.1.9 default, unchanged
 ```
 
-Two facts about the **default** path (upstream `place-net.ts`, not touched by this work): it creates the
-stub wire *with* the net name, so every default-placed pin reads as label + symbol; and in online mode the
-signal "port" it places is a library symbol that EasyEDA classifies as `netflag`. Both are visible now and both
-are what `restyle_connections` cleans up (`R4.1 → flag` keeps the flag and clears the label; `R4.2 → port` …).
+`R4` is byte-identical to v1.1.9 behaviour: no placement code changed (diff vs 3045ee5 touches only
+`connections*.ts`, `geometry.ts`, 6 lines of `utils.ts` and the event dispatch), and the `connection_style`
+post-pass runs only when `connectionStyles` is present. Two pre-existing facts about that path are simply now
+*visible* in the read: upstream `place-net.ts` creates the stub wire *with* the net name (the wire's `Name`
+attribute, `valueVisible: true`), so a default-placed pin has always carried both a wire name and a symbol;
+and in online mode the signal "port" it places is a library symbol EasyEDA classifies as `netflag`.
+`restyle_connections` is what cleans this up (`R4.1 → flag` kept the flag and cleared the wire name;
+`R4.2 → port(output)` replaced both).
 `connectionStyleResult` for `R3.1` correctly reported `scope_change: "global→local"`.
 
 ### Scope

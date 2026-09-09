@@ -120,9 +120,11 @@ default (rail-looking names → flag, everything else → bidirectional port).
 
 The result carries `connectionStyleResult` with the same `applied / skipped / errors` shape.
 
-**Expect duplicates on parts placed the old way.** The default placement names the stub wire *and* adds a
-symbol, so a freshly placed pin usually reads as `label` + `flag`/`port`. That is normal; one restyle to the
-style you want keeps the matching symbol and removes the rest.
+**Parts placed without `connection_style` behave exactly as before**; that path is untouched. Note that it has
+always named the stub wire *and* placed a flag/port on its end, so such a pin genuinely carries both a visible
+net name on the wire and a symbol. `include_connections` reports that faithfully as `label` + `flag`/`port` —
+it is pre-existing state, not something the new API added. One restyle to the style you want keeps the
+matching symbol and removes the rest.
 
 ## 5. Scope: the one thing the tool cannot check for you
 
