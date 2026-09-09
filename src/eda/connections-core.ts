@@ -266,7 +266,9 @@ export function describeConnectionAt(index: ConnectionIndex, x: number, y: numbe
     }
 
     if (wireIds.length > 1) {
-        log?.(`Pin at ${to2(x)},${to2(y)} touches ${wireIds.length} wires; using ${wireIds[0]}`);
+        // Normal on hand-drawn sheets (a corner or T-junction at the pin). The cluster walk
+        // below covers every one of them, so no symbol is missed; wire_id names the first.
+        log?.(`Pin at ${to2(x)},${to2(y)} sits on ${wireIds.length} wire primitives; reporting ${wireIds[0]} and the whole connected run`);
     }
 
     const wire = index.wireById.get(wireIds[0])!;

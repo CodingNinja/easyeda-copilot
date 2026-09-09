@@ -181,7 +181,7 @@ test('multiple wires at the pin: first is used and the logger is told', () => {
     const result = describeConnectionAt(index, 0, 0, m => messages.push(m));
     assert.equal(result.wire_id, 'w1');
     assert.equal(messages.length, 1);
-    assert.match(messages[0], /2 wires/);
+    assert.match(messages[0], /2 wire primitives/);
 });
 
 test('wire_net: blank becomes null, EasyEDA auto-names are kept verbatim', () => {

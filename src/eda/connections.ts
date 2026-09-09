@@ -200,7 +200,11 @@ export async function annotateConnections(schematic: ExplainCircuit): Promise<Ex
     const components = schematic.components.map(component => {
         const positions = pinsByDesignator.get(component.designator);
         if (!positions) {
-            warn(`no primitive found for ${component.designator}; connections not annotated`);
+            // Pin-less entries (sheet frames and similar pseudo-components the netlist lists)
+            // have nothing to annotate; only a real part with pins is worth reporting.
+            if (component.pins.length) {
+                warn(`no primitive found for ${component.designator}; connections not annotated`);
+            }
             return component;
         }
 
