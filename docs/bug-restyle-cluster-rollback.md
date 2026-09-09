@@ -23,3 +23,15 @@ symbol on the pin's own segment (a new stub off the pin if needed) rather than o
 
 Rollback worked in all five cases: `before == after`, page unchanged. Raw outputs: `/tmp/cs/01_dry.json`,
 `/tmp/cs/01_applied2.json`, `/tmp/cs/tvs_1.json`; reads `/tmp/cs/01_read*.json`.
+
+## Reproduced again on Sheet 02 (`8fa31840ba825b92`), 2026-09-09
+
+Same signature, three symbols on the wire, every two-symbol and one-symbol pin on the page succeeded (17/20):
+
+| Pin | Net | Symbols on wire | Result |
+|---|---|---|---|
+| C10.1 | VCC1_3V3 | label + port(in) + flag | ROLLED_BACK |
+| C10.2 | GND | label + flag + flag | ROLLED_BACK |
+| C11.1 | VPER_3V3 | label + port(in) + flag | ROLLED_BACK |
+
+Raw: `/tmp/cs/02_dry.json` (plans), `/tmp/cs/02_r0.json` (errors), `/tmp/cs/02_read.json` / `02_read2.json`.

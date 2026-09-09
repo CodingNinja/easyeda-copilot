@@ -683,7 +683,17 @@ export async function restyleConnections(items: RestyleItem[], options: { dryRun
                 : verifyRestyleOutcome({ before: view, after, pinRef, style: item.style.symbol });
 
             if (!verdict.ok) {
-                log(`restyle ${pinRef} FAILED verification: ${verdict.detail}; rolling back`, ESYS_LogType.FATAL_ERROR);
+                // Spell out the plan: which symbol was created and where, and what was removed.
+                // Without this a failure log cannot distinguish "kept a symbol that does not name
+                // the net" from "created one that does not touch the wire".
+                const planDetail = [
+                    plan.create
+                        ? `created ${plan.create.type}${plan.create.flagKind ? `/${plan.create.flagKind}` : ''}${plan.create.direction ? `/${plan.create.direction}` : ''} "${plan.create.name}" at ${plan.create.x},${plan.create.y} rot ${plan.create.rotation} (id ${createdId ?? 'none'})`
+                        : plan.keep ? `kept existing ${plan.keep.type} "${plan.keep.name}" (id ${plan.keep.primitive_id})` : 'created nothing',
+                    plan.stub ? `stub ${JSON.stringify(plan.stub)} (id ${createdWireId ?? 'none'})` : undefined,
+                    `removed [${plan.remove.map(symbol => `${symbol.type}:${symbol.primitive_id}`).join(', ')}]`,
+                ].filter(Boolean).join('; ');
+                log(`restyle ${pinRef} FAILED verification: ${verdict.detail}; ${planDetail}; rolling back`, ESYS_LogType.FATAL_ERROR);
                 let rolledBack = true;
                 if (createdId && plan.create!.type !== 'label') {
                     const freshIndex = buildConnectionIndex(await collectPageConnections());
@@ -700,7 +710,7 @@ export async function restyleConnections(items: RestyleItem[], options: { dryRun
                 view = await readPinNets();
                 report.errors.push({
                     item,
-                    error: `${verdict.detail}. ${rolledBack ? 'Changes were rolled back.' : 'Rollback incomplete: restore the checkpoint.'}`,
+                    error: `${verdict.detail}. Plan: ${planDetail}. ${rolledBack ? 'Changes were rolled back.' : 'Rollback incomplete: restore the checkpoint.'}`,
                     code: rolledBack ? 'ROLLED_BACK' : 'ROLLBACK_FAILED',
                 });
                 continue;
