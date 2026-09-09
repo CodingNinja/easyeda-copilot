@@ -153,6 +153,19 @@ and in online mode the signal "port" it places is a library symbol EasyEDA class
 `R4.2 → port(output)` replaced both).
 `connectionStyleResult` for `R3.1` correctly reported `scope_change: "global→local"`.
 
+### Real-sheet defect: who actually names the net (CruiserCtrl sheet 01, 2026-09-09)
+
+Restyling `TVS1.1`, `C1.1`, `C1.2`, `C3.1` to `flag` failed verification and rolled back, e.g.
+`TVS1.1 net changed from "VBAT_RAW" to "$2N3"`. Cause: on assembly-generated sheets the **wire** carries the
+name and the flag/port symbols are library parts (upstream `place-net.ts` → `placeComponent`) that only hold
+`Global Net Name` as a property, which the netlist ignores. Keeping such a symbol while clearing the wire's
+name therefore left the net unnamed. Native symbols (`createNetFlag` / `createNetPort`) do name the net, as the
+scratch page showed. Fixed in 1.2.7: when the plan removes a label, an existing flag/port is never kept — it is
+re-created natively. The rollback behaved exactly as designed (`before == after`, no page change).
+
+Also seen on that sheet, both correct refusals rather than bugs: `R_SH.1` carries ports `VBAT_RAW` **and**
+`SHUNT_P`, and `C4.1` carries `VSUP` label + `VSUP_RAW` port → `NAME_MISMATCH`, for a human to resolve.
+
 ### Scope
 
 Owner decision (2026-09-09): scope changes (label ⇄ port/flag) are **reported, not blocked** —

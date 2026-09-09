@@ -126,6 +126,12 @@ net name on the wire and a symbol. `include_connections` reports that faithfully
 it is pre-existing state, not something the new API added. One restyle to the style you want keeps the
 matching symbol and removes the rest.
 
+**Why an existing symbol is sometimes replaced rather than kept.** Flags and ports placed by circuit assembly
+are library symbols that hold the net name only as a property; EasyEDA's netlist takes the name from the wire.
+So whenever the wire's own name has to be cleared, the tool re-creates the symbol natively (which does name the
+net) instead of keeping the old one. If you see `ROLLED_BACK` with `net changed from "X" to "$2N…"`, that is this
+situation being caught: the page is untouched and the extension needs to be ≥ 1.2.7.
+
 ## 5. Scope: the one thing the tool cannot check for you
 
 Connectivity is verified on the **current page** only. Changing a label to a port/flag (`local→global`) may

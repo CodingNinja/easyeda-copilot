@@ -506,8 +506,19 @@ export function planRestyle(input: RestylePlanInput): RestylePlanResult {
         return { ok: true, plan: { net, scope_change: scopeChangeOf(symbols, style), stub: null, create: null, remove: symbols, keep: null } };
     }
 
-    const keep = symbols.find(symbol => matchesRequestedStyle(symbol, style)) ?? null;
-    const remove = symbols.filter(symbol => symbol !== keep);
+    let keep = symbols.find(symbol => matchesRequestedStyle(symbol, style)) ?? null;
+    let remove = symbols.filter(symbol => symbol !== keep);
+
+    // A flag or port placed by circuit assembly is a library symbol that carries the net
+    // name only as a property; EasyEDA's netlist takes the name from the wire instead.
+    // Keeping such a symbol while clearing the wire's name would leave the net unnamed
+    // (observed on real sheets: the net became "$2N3"). So when the wire's name has to go,
+    // always re-create the symbol natively, which does name the net.
+    if (keep && keep.type !== 'label' && remove.some(symbol => symbol.type === 'label')) {
+        remove = symbols;
+        keep = null;
+    }
+
     if (keep) {
         return { ok: true, plan: { net, scope_change: scopeChangeOf(symbols, style), stub: null, create: null, remove, keep } };
     }

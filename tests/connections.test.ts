@@ -572,3 +572,30 @@ test('plan carries scope_change', () => {
     const result = plan({ index, site: { x: 0, y: 0, rotation: 90 }, style: { symbol: 'port', direction: 'output' } });
     assert.equal(result.ok && result.plan.scope_change, 'local→global');
 });
+
+
+test('a flag is re-created natively when the wire name must be cleared (real-sheet case)', () => {
+    // TVS1.1 on CruiserCtrl sheet 01: wire named VBAT_RAW plus assembly-placed port and flag.
+    const index = buildConnectionIndex(page({
+        wires: [wire('w1', 'VBAT_RAW', [100, 100, 100, 130])],
+        pointSymbols: [flag('f1', 'VBAT_RAW', 100, 130), port('p1', 'VBAT_RAW', 100, 130, 'input')],
+    }));
+    const result = plan({ index, site: { x: 100, y: 100, rotation: 90 }, style: { symbol: 'flag', flag_kind: 'Power' }, signalName: 'VBAT_RAW' });
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    // The existing flag is NOT kept: it would stop naming the net once the wire name goes.
+    assert.equal(result.plan.keep, null);
+    assert.equal(result.plan.create?.type, 'flag');
+    assert.equal(result.plan.create?.flagKind, 'Power');
+    assert.deepEqual(result.plan.remove.map(s => s.type).sort(), ['flag', 'label', 'port']);
+});
+
+test('an existing symbol is still kept when no wire name has to be cleared', () => {
+    const index = buildConnectionIndex(page({
+        wires: [wire('w1', '', [100, 100, 100, 130])],
+        pointSymbols: [flag('f1', 'GND', 100, 130), port('p1', 'GND', 100, 130, 'input')],
+    }));
+    const result = plan({ index, site: { x: 100, y: 100, rotation: 90 }, style: { symbol: 'flag' }, signalName: 'GND' });
+    assert.equal(result.ok && result.plan.keep?.primitive_id, 'f1');
+    assert.deepEqual(result.ok ? result.plan.remove.map(s => s.type) : [], ['port']);
+});
