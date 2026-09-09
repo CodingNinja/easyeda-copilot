@@ -1,8 +1,8 @@
 import { sch_PrimitiveWireSnap } from "./wire-snap";
 
-export const to2 = (x: number) => {
-    return Math.round(x / 5) * 5;
-};
+import { to2 } from './geometry';
+// Grid snapping lives in the eda-free `geometry.ts` so unit tests can use it; re-exported here for existing callers.
+export { to2 };
 
 export const getPageSize = async () => {
     try {

@@ -7,6 +7,7 @@ import { SKILL_DOC_PATH, TEMP_DIR } from "../utils/dirs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CircuitAssembly, CircuitMod, CircuitModStruct, ExplainCircuit, ExplainCircuitStruct } from "@copilot/shared/types/circuit";
+import { hasConnectionStyles, splitConnectionStyles } from "../utils/connection-styles";
 
 type SchematicBlocks = Record<string, string[]>;
 
@@ -105,10 +106,29 @@ export function registerCircuitTools(server: McpServer, bridge: Bridge) {
         'extract_circuit_on_current_page',
         {
             title: 'Extract Circuit',
-            description: `Apply circuit changes to the current EasyEDA page. Every added component must include part_uuid. The result reports remaining current-sheet space and warns below 10%. For circuit modification docs, read: ${SKILL_DOC_PATH}`,
+            description: 'Apply circuit changes to the current EasyEDA page. Every added component must include part_uuid. '
+                + 'Each pin (and each external_connect entry) may carry connection_style to choose how its connection is drawn: '
+                + 'flag (power symbol), port (direction required: input = Netport In, output = Netport Out, bidirectional = Netport Bi), label (net label on the wire) or wire; omitted = default rule (GND/rail names → flag, others → bidirectional port). '
+                + 'restyle_connections changes the symbol on EXISTING pins without changing nets; use dry_run to preview. '
+                + `The result reports remaining current-sheet space and warns below 10%. For circuit modification docs, read: ${SKILL_DOC_PATH}`,
             inputSchema: CircuitModStruct(),
         },
-        async (circuit) => {
+        async (input) => {
+            // restyle_connections and dry_run are handled locally; the cloud service must never see them.
+            const { restyle_connections, dry_run, ...circuit } = input;
+            const restyleItems = restyle_connections ?? [];
+            const hasCircuitChanges = circuit.add_components.length > 0
+                || circuit.add_reused_blocks.length > 0
+                || (circuit.rm_components?.length ?? 0) > 0
+                || (circuit.external_rm_connect?.length ?? 0) > 0
+                || (circuit.external_connect?.length ?? 0) > 0;
+
+            if (dry_run && hasCircuitChanges) {
+                return textResult({
+                    error: 'dry_run is only supported when the call contains restyle_connections alone. Remove the other changes or drop dry_run.',
+                });
+            }
+
             const missingPartUuid = circuit.add_components
                 .filter(component => !component.part_uuid || /^0+$/.test(component.part_uuid))
                 .map(component => component.designator);
@@ -120,14 +140,38 @@ export function registerCircuitTools(server: McpServer, bridge: Bridge) {
                 });
             }
 
-            const resolvedInputCircuit = await bridge.requestEasyEda('get-schematic');
-            const result = await postJson('/v1/mcp-tools/extract-circuit', { circuit, inputCircuit: resolvedInputCircuit });
-            const assembled = await bridge.requestEasyEda('assemble-circuit', result as Record<string, unknown>, 300000);
-            const sheetSpace = sheetSpaceNotice(assembled);
-            return textResult({
-                message: 'Circuit sent to EasyEDA for assembly.',
-                ...(sheetSpace ? { sheetSpace } : {}),
-            });
+            const response: Record<string, unknown> = {};
+
+            if (hasCircuitChanges || !restyleItems.length) {
+                // connection_style never travels through the cloud: strip it here and hand it to the
+                // extension next to the assembly so it is applied as a post-pass.
+                const { circuit: cloudCircuit, connectionStyles } = splitConnectionStyles(circuit);
+                const resolvedInputCircuit = await bridge.requestEasyEda('get-schematic');
+                const result = await postJson('/v1/mcp-tools/extract-circuit', { circuit: cloudCircuit, inputCircuit: resolvedInputCircuit });
+                const assembled = await bridge.requestEasyEda('assemble-circuit', {
+                    ...(result as Record<string, unknown>),
+                    ...(hasConnectionStyles(connectionStyles) ? { connectionStyles } : {}),
+                }, 300000);
+                const sheetSpace = sheetSpaceNotice(assembled);
+                response.message = 'Circuit sent to EasyEDA for assembly.';
+                if (sheetSpace) response.sheetSpace = sheetSpace;
+                const connectionRestyle = (assembled as { connectionRestyle?: unknown } | undefined)?.connectionRestyle;
+                if (connectionRestyle) response.connectionStyleResult = connectionRestyle;
+            }
+
+            if (restyleItems.length) {
+                response.connectionRestyle = await bridge.requestEasyEda('restyle-connections', {
+                    items: restyleItems,
+                    dryRun: dry_run === true,
+                }, 300000);
+                if (!response.message) {
+                    response.message = dry_run
+                        ? 'Dry run: nothing was changed. See connectionRestyle for the plan.'
+                        : 'Connection symbols restyled. See connectionRestyle for applied, skipped and errors.';
+                }
+            }
+
+            return textResult(response);
         },
     );
 
@@ -232,11 +276,21 @@ export function registerCircuitTools(server: McpServer, bridge: Bridge) {
         {
             title: 'Get EasyEDA Schematic',
             description: 'Get the current EasyEDA schematic through the connected MCP interface.\n' +
+                'With include_connections=true every pin also carries `connection`: the wire touching the pin, ' +
+                'that wire\'s own net attribute, and `symbols` — every naming symbol (power flag / net port / net label) ' +
+                'found on that wire, each with its primitive_id. Two symbols with different names on one pin means the ' +
+                'page draws one net two ways; an empty list means a plain wire to another pin or an unnamed stub. ' +
+                'Read with include_connections before calling restyle_connections.\n' +
                 `Format: ${JSON.stringify(ExplainCircuitStruct().toJSONSchema())}`,
-            inputSchema: z.object({}),
+            inputSchema: z.object({
+                include_connections: z.boolean().optional().default(false)
+                    .describe('Also report the naming symbols (flag/port/label) on the wire at each pin.'),
+            }),
         },
-        async () => {
-            const result = await bridge.requestEasyEda('get-schematic') as ExplainCircuit;
+        async ({ include_connections }) => {
+            const result = await bridge.requestEasyEda('get-schematic', {
+                ...(include_connections ? { includeConnections: true } : {}),
+            }) as ExplainCircuit;
             const schematic = { ...result, components: result.components.map(c => ({ ...c, pos: undefined, })) };
 
             if (schematic.components.length > 40) {
@@ -253,4 +307,31 @@ export function registerCircuitTools(server: McpServer, bridge: Bridge) {
             return textResult(schematic);
         },
     );
+
+    if (process.env.EASYEDA_COPILOT_DEBUG === '1') {
+        server.registerTool(
+            'debug_dump_net_symbols',
+            {
+                title: 'Debug: Dump Net Symbols',
+                description: 'Developer diagnostic. Dumps every component (including net flags, ports and labels), wire and attribute primitive on the current EasyEDA schematic page with raw ids, nets, coordinates and attribute keys. Read-only. Available only when the MCP server runs with EASYEDA_COPILOT_DEBUG=1.',
+                inputSchema: z.object({}),
+            },
+            async () => {
+                const result = await bridge.requestEasyEda('debug-dump-net-symbols');
+                const text = JSON.stringify(result, null, 2);
+
+                if (text.length > 60_000) {
+                    await mkdir(TEMP_DIR, { recursive: true });
+                    const savePath = join(TEMP_DIR, `net-symbols-${crypto.randomUUID().slice(0, 6)}.json`);
+                    await writeFile(savePath, text);
+                    return textResult({
+                        message: 'Dump too big, so it was saved to a file.',
+                        path: savePath,
+                    });
+                }
+
+                return textResult(result);
+            },
+        );
+    }
 }

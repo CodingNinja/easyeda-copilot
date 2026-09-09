@@ -19,6 +19,7 @@ Complete only the stage requested by the user. A schematic task does not authori
 | Complete schematic-to-PCB project | `workflow.md`, then each stage reference when reached | requested final stage is checked |
 | Create or organize schematic pages | `schematic/project-and-pages.md` | functional pages exist and are named |
 | Create, modify, or beautify a schematic | `schematic/workflow.md`, `schematic/circuit-mod.md` | current-page readback is checked |
+| Change how a pin's connection is drawn (flag / port / label / wire) | `schematic/circuit-mod.md` → "Connection symbols" | read with `include_connections` first, then `restyle_connections`; readback shows one symbol per pin |
 | Place or update PCB components | `pcb-layout/instructions.md`, `pcb-layout/dsl.ts` | approved placement is assembled and checked; do not route |
 | Change connectors, outline, holes, controls, displays, or antennas | placement docs plus `pcb-layout/mechanical-validation.md` | LLM and user approve mechanics |
 | Apply layer count, rules, zones, copper, or routing | `pcb-routing/instructions.md`, `pcb-routing/dsl.ts` | requested PCB operation is checked |

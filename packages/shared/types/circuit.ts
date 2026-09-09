@@ -2,10 +2,25 @@ import { z } from "zod";
 import { LCSC_uuid } from "./lcsc";
 import { ReusedCategory, ReusedTags } from "./reused";
 
+export const ConnectionStyleSchema = () => z.object({
+    symbol: z.enum(['flag', 'port', 'label', 'wire']).describe(
+        'flag = power flag (GND/rail symbol); port = net port — there are three kinds, so `direction` is required: input = "Netport (In)", output = "Netport (Out)", bidirectional = "Netport (Bi)"; '
+        + 'label = net label on the wire; wire = no naming symbol (only valid when the pin is joined by a wire to another pin on this page).'),
+    direction: z.enum(['input', 'output', 'bidirectional']).optional().describe(
+        'Required when symbol is "port": which net port kind to draw (In / Out / Bi). Ignored for other symbols.'),
+    flag_kind: z.enum(['Power', 'Ground', 'AnalogGround', 'ProtectGround']).optional().describe(
+        'Flags only. Default: ProtectGround if the net name contains PGND, Ground if it contains GND, else Power.'),
+}).refine(style => style.symbol !== 'port' || !!style.direction, {
+    message: 'symbol "port" requires direction: input (Netport In), output (Netport Out) or bidirectional (Netport Bi).',
+    path: ['direction'],
+});
+
 export const PinSchema = () => z.object({
     pin_number: z.union([z.number(), z.string()]).describe('Pin number.'),
     name: z.string().describe('Pin name (e.g., "VCC").'),
     signal_name: z.string().describe('The name of the signal the pin is connected to. (Name only). The signal name assigned to the pin must be identical to the signal name of the target output.'),
+    connection_style: ConnectionStyleSchema().optional().describe(
+        'How to draw this pin\'s connection when the component is placed. Omit for the default (rail names → flag, others → port).'),
 });
 
 export const BaseComponentSchema = () => z.object({
@@ -130,10 +145,31 @@ export const CircuitAssemblyStruct = () => z.object({
     replace_components: z.array(z.string()).optional(),
 });
 
+export const RestyleConnectionSchema = () => z.object({
+    designator: z.string().describe('Existing component designator.'),
+    pin_number: z.union([z.number(), z.string()]).describe('Pin number on that component.'),
+    style: ConnectionStyleSchema(),
+});
+
+export const ConnectionSymbolSchema = () => z.object({
+    type: z.enum(['flag', 'port', 'label']).describe('Kind of naming symbol found on the wire that touches this pin. A label is the wire\'s own net name.'),
+    name: z.string().describe('Net name the symbol carries.'),
+    direction: z.enum(['input', 'output', 'bidirectional']).nullable().optional().describe(
+        'Ports: which kind — input = Netport (In), output = Netport (Out), bidirectional = Netport (Bi). null only if EasyEDA does not expose it. Absent for flags and labels.'),
+    primitive_id: z.string().describe('EasyEDA primitive id of the symbol (for a label: the id of the wire that carries the name).'),
+});
+
+export const PinConnectionSchema = () => z.object({
+    wire_id: z.string().nullable().describe('Primitive id of the wire touching the pin; null if the pin has no wire.'),
+    wire_net: z.string().nullable().describe('The wire\'s own net attribute as EasyEDA reports it; may be an auto-name starting with "$".'),
+    symbols: z.array(ConnectionSymbolSchema()).describe('Every naming symbol on that wire. Empty = plain wire to another pin, or unnamed stub.'),
+});
+
 const ExplainPinSchema = () => z.object({
     pin_number: z.union([z.number(), z.string()]).describe('Pin number.'),
     name: z.string().describe('Pin name (e.g., "VCC").'),
     signal_name: z.string().describe('The name of the signal the pin is connected to. (Name only). The signal name assigned to the pin must be identical to the signal name of the target output.'),
+    connection: PinConnectionSchema().optional().describe('Present only when the schematic was read with include_connections.'),
 });
 
 export const ExplainComponentSchema = () => z.object({
@@ -169,7 +205,15 @@ export const CircuitModStruct = () => z.object({
         designator: z.string().describe('Target component designator'),
         pin_number: z.union([z.number(), z.string()]).describe('Target component pin number'),
         signal_name: z.string().describe('Signal name'),
-    })).nullable())).describe('Use only when you need to connect to a pin of an external component that you have not modified and that does not have a signal_name')
+        connection_style: ConnectionStyleSchema().optional().describe('How to draw the new connection on that pin. Omit for the default.'),
+    })).nullable())).describe('Use only when you need to connect to a pin of an external component that you have not modified and that does not have a signal_name'),
+    restyle_connections: z.array(RestyleConnectionSchema()).nullable().optional().describe(
+        'Change the naming symbol (flag / port / label / plain wire) on the wire of an EXISTING component pin without changing its net. '
+        + 'Read the page with get_current_page_schematic(include_connections=true) first. '
+        + 'Refused per pin with NAME_MISMATCH when the wire carries two different names, and WOULD_ORPHAN when style "wire" would leave the pin unconnected. '
+        + 'May be used alone (no cloud call) or together with the other fields.'),
+    dry_run: z.boolean().optional().describe(
+        'Only for restyle_connections: report what would be created/removed without touching the page. Rejected if add/remove changes are also present.'),
 });
 
 export type CircuitMod = z.infer<ReturnType<typeof CircuitModStruct>>;
@@ -179,4 +223,8 @@ export type CircuitWithoutBlocks = z.infer<ReturnType<typeof CircuitWithoutBlock
 export type Circuit = z.infer<ReturnType<typeof CircuitStruct>>;
 export type CircuitComponent = z.infer<ReturnType<typeof BaseComponentSchema>>;
 export type Pin = z.infer<ReturnType<typeof PinSchema>>;
+export type ConnectionSymbol = z.infer<ReturnType<typeof ConnectionSymbolSchema>>;
+export type ConnectionStyle = z.infer<ReturnType<typeof ConnectionStyleSchema>>;
+export type RestyleConnection = z.infer<ReturnType<typeof RestyleConnectionSchema>>;
+export type PinConnection = z.infer<ReturnType<typeof PinConnectionSchema>>;
 export type CircuitBlocks = z.infer<ReturnType<typeof CircuitBlocksStruct>>;

@@ -6,6 +6,8 @@ import {
     type RoutingCopperApplication,
 } from './eda/pcb-assemble';
 import { checkpointer } from './eda/checkpointer';
+import { annotateConnections, dumpNetSymbols, restyleConnections } from './eda/connections';
+import { connectionStylesToRestyleItems, type ConnectionStylesMap, type RestyleItem } from './eda/connections-core';
 import { checkPcbDrc } from './eda/drc';
 import {
     getPcb,
@@ -1361,7 +1363,25 @@ async function handleMessage(message: McpMessage, connectionEpoch: number) {
         if (message.event === 'get-schematic') {
             const primitiveIds = await eda.sch_PrimitiveComponent.getAllPrimitiveId().catch(() => []);
             const schematic = await getSchematic([...primitiveIds], { disableExtractPos: true });
-            reply(true, schematic);
+            reply(true, body.includeConnections === true ? await annotateConnections(schematic) : schematic);
+            return;
+        }
+
+        // Read-only diagnostic dump of every primitive that can name a net on the
+        // current page: components (incl. flags / ports / labels), wires and attributes.
+        // Exposed by the MCP server only when EASYEDA_COPILOT_DEBUG=1.
+        if (message.event === 'debug-dump-net-symbols') {
+            reply(true, await dumpNetSymbols());
+            return;
+        }
+
+        if (message.event === 'restyle-connections') {
+            const items = Array.isArray(body.items) ? body.items as RestyleItem[] : [];
+            if (!items.length) throw new Error('restyle-connections: items must be a non-empty array');
+            const dryRun = body.dryRun === true;
+
+            if (!dryRun) await checkpointer.save(false);
+            reply(true, await restyleConnections(items, { dryRun }));
             return;
         }
 
@@ -1787,6 +1807,17 @@ async function handleMessage(message: McpMessage, connectionEpoch: number) {
 
             await checkpointer.save(false);
             await assembleCircuit(circuit as Parameters<typeof assembleCircuit>[0]);
+
+            // connection_style post-pass: the assembly placed default symbols; restyle the
+            // requested pins. Shares the checkpoint taken above (no second checkpoint).
+            const styleItems = connectionStylesToRestyleItems(body.connectionStyles as ConnectionStylesMap | undefined);
+            const connectionRestyle = styleItems.length
+                ? await restyleConnections(styleItems, { dryRun: false }).catch(error => {
+                    eda.sys_Log.add(`connection_style post-pass failed: ${(error as Error).message}`, ESYS_LogType.WARNING);
+                    return { error: (error as Error).message };
+                })
+                : undefined;
+
             const sheetSpace = await withTimeout(
                 estimateSchematicSheetSpace(),
                 5000,
@@ -1798,7 +1829,11 @@ async function handleMessage(message: McpMessage, connectionEpoch: number) {
                 );
                 return undefined;
             });
-            reply(true, { assembled: true, ...(sheetSpace ? { sheetSpace } : {}) });
+            reply(true, {
+                assembled: true,
+                ...(sheetSpace ? { sheetSpace } : {}),
+                ...(connectionRestyle ? { connectionRestyle } : {}),
+            });
             return;
         }
 

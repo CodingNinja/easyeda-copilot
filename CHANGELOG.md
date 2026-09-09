@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.5 - 2026-09-09
+
+- `get_current_page_schematic` gains `include_connections`: every pin reports the wire touching it and every naming symbol (power flag, net port, net label) on that wire, so mixed or duplicated net symbols can be seen.
+- `connection_style` on `add_components[*].pins` and `external_connect` chooses flag / port (with direction) / label / plain wire per pin when a component is placed. Omitted keeps the previous default rule.
+- `restyle_connections` on `extract_circuit_on_current_page` changes the symbol on an existing pin's wire without changing the net, with `dry_run`, netlist verification and automatic rollback. Refuses pins whose wire carries two different names.
+- Developer tooling: `debug_dump_net_symbols` (with `EASYEDA_COPILOT_DEBUG=1`), `mcp/scripts/easyeda-request.mjs` to send events through a running bridge, and `npm test` for the extension unit tests.
+
 ## 1.1.9 - 2026-09-08
 
 - Use native EasyEDA ground and power symbols, and native net ports in desktop mode, with consistent rotations when creating and cloning schematic components.
